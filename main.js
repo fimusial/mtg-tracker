@@ -2,20 +2,20 @@ const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, Notification, shell } =
 const path = require('path');
 const fs = require('fs');
 const chokidar = require('chokidar');
-const LogParser = require('./logParserV5');
+const LogParser = require('./LogParser');
 const DataStore = require('./dataStore');
 const CardUpdater = require('./cardUpdater');
+const { CourseStore, courseCardIds } = require('./matchCourse/courseStore');
 
 let mainWindow;
 let tray;
 let logWatcher;
 let parser;
 let dataStore;
+let courseStore;
 let cardUpdater;
 let isQuitting = false;
 
-// Default log path for MTG Arena on Windows
-// MTG Arena uses "Player.log" but sometimes "output_log.txt"
 const MTGA_LOG_DIR = path.join(
   process.env.USERPROFILE || process.env.HOME,
   'AppData',
@@ -25,7 +25,6 @@ const MTGA_LOG_DIR = path.join(
 );
 
 function getLogPath() {
-  // Try Player.log first, then output_log.txt
   const playerLog = path.join(MTGA_LOG_DIR, 'Player.log');
   const outputLog = path.join(MTGA_LOG_DIR, 'output_log.txt');
 
@@ -38,8 +37,32 @@ function getLogPath() {
     return outputLog;
   }
 
-  // Return default even if not found, so user can see error
   return playerLog;
+}
+
+const MIN_ZOOM = 0.8;
+const MAX_ZOOM = 1.5;
+
+function clampZoom(factor) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(factor) || 1));
+}
+
+function applySavedZoom() {
+  if (!mainWindow || !dataStore) {
+    return;
+  }
+
+  const zoom = clampZoom(dataStore.getSettings().zoomFactor);
+
+  if (mainWindow.isVisible()) {
+    mainWindow.webContents.setZoomFactor(zoom);
+  } else {
+    mainWindow.once('show', () => {
+      if (mainWindow) {
+        mainWindow.webContents.setZoomFactor(zoom);
+      }
+    });
+  }
 }
 
 function createWindow() {
@@ -48,18 +71,34 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    icon: path.join(__dirname, 'icon.png'),
+    icon: path.join(__dirname, 'images/icon.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
     },
-    frame: false, // Borderless window
-    show: false // Don't show until ready
+    frame: false,
+    show: false
   });
 
   mainWindow.loadFile('index.html');
 
-  // Show window when ready to prevent flash
+  const openExternally = (url) => {
+    // Only ever hand http(s) to the OS, never file:// or anything exotic.
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  };
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => openExternally(url));
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== mainWindow.webContents.getURL()) {
+      event.preventDefault();
+      openExternally(url);
+    }
+  });
+
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
@@ -77,15 +116,12 @@ function createWindow() {
 }
 
 function createTray() {
-  // Use a default icon or create one if needed
   let iconPath;
   try {
-    // Try to use the app icon if available, otherwise use nativeImage
-    const trayIconPath = path.join(__dirname, 'tray-icon.png');
+    const trayIconPath = path.join(__dirname, 'images/tray-icon.png');
     if (fs.existsSync(trayIconPath)) {
       iconPath = trayIconPath;
     } else {
-      // Use an empty native image as fallback
       iconPath = null;
     }
   } catch (e) {
@@ -96,7 +132,6 @@ function createTray() {
     if (iconPath) {
       tray = new Tray(iconPath);
     } else {
-      // Create a simple 16x16 transparent icon programmatically
       const { nativeImage } = require('electron');
       const emptyIcon = nativeImage.createEmpty();
       tray = new Tray(emptyIcon);
@@ -177,23 +212,70 @@ function updateTrayStatus(message) {
   }
 }
 
+function getPreviousLogPath(logPath) {
+  const extension = path.extname(logPath);
+  const name = path.basename(logPath, extension);
+  return path.join(path.dirname(logPath), `${name}-prev${extension}`);
+}
+
+function scanLogForMatches(logFile, label, { includeInventory = false } = {}) {
+  const empty = { events: 0, matches: 0, bytes: 0 };
+
+  if (!fs.existsSync(logFile)) {
+    console.log(`[${label}] No log found at:`, logFile);
+    return empty;
+  }
+
+  try {
+    const data = fs.readFileSync(logFile, 'utf8');
+    const events = new LogParser().parse(data);
+
+    const wanted = includeInventory ? ['MATCH_END', 'INVENTORY_UPDATE'] : ['MATCH_END'];
+    const matchEvents = events.filter(event => event.type === 'MATCH_END');
+
+    for (const event of events) {
+      if (wanted.includes(event.type)) {
+        handleGameEvent(event, { silent: true });
+      }
+    }
+
+    recordMatchCourses(data, events);
+
+    console.log(`[${label}] Scanned ${logFile}: ${matchEvents.length} match(es) from ${events.length} events`);
+    return { events: events.length, matches: matchEvents.length, bytes: data.length };
+  } catch (error) {
+    console.error(`[${label}] Error scanning log:`, error.message);
+    return empty;
+  }
+}
+
+function trySendStatus(payload) {
+  if (!mainWindow || !mainWindow.webContents) {
+    return;
+  }
+
+  const wc = mainWindow.webContents;
+  if (wc.isLoading()) {
+    wc.once('did-finish-load', () => wc.send('update-status', payload));
+  } else {
+    wc.send('update-status', payload);
+  }
+}
+
 function startLogWatcher(logPath) {
   if (logWatcher) {
     logWatcher.close();
   }
 
-  // Create parser
   parser = new LogParser();
-  // dataStore is now created in app.whenReady() after card update
 
-  // Check if log file exists
   if (!fs.existsSync(logPath)) {
     console.log('Log file not found at:', logPath);
-    updateTrayStatus('Log file not found - Check settings');
+    updateTrayStatus('Log file not found, check settings...');
+    trySendStatus({ status: 'warning', text: 'Log file not found, check settings...' });
     return false;
   }
 
-  // Watch the log file
   logWatcher = chokidar.watch(logPath, {
     persistent: true,
     usePolling: true,
@@ -214,8 +296,6 @@ function startLogWatcher(logPath) {
     console.error('Error getting initial file size:', e);
   }
 
-  // Periodic full re-parse to catch new events
-  // This is more reliable than trying to parse only new data
   console.log('[AutoScan] Starting auto-scan every 2 seconds...');
   setInterval(async () => {
     try {
@@ -225,11 +305,9 @@ function startLogWatcher(logPath) {
       if (currentSize > 0) {
         const fullData = fs.readFileSync(logPath, 'utf8');
 
-        // Only re-parse if size changed significantly or periodically
         if (Math.abs(currentSize - lastSize) > 100 || !lastSize) {
           lastSize = currentSize;
 
-          // Create fresh parser to avoid state issues
           const freshParser = new LogParser();
           const events = freshParser.parse(fullData);
 
@@ -243,36 +321,34 @@ function startLogWatcher(logPath) {
               }
               handleGameEvent(event);
             }
+
+            recordMatchCourses(fullData, events);
             console.log(`[AutoScan] Processed ${matchCount} matches`);
           }
-        } else {
-          console.log('[AutoScan] No changes detected (log size unchanged)');
         }
       }
     } catch (error) {
       console.error('[AutoScan] Error in periodic log check:', error);
     }
-  }, 2000); // Check every 2 seconds
+  }, 2000);
 
-  // Also watch for file changes (for when log rotates)
   logWatcher.on('change', async (filePath) => {
     try {
       const stats = fs.statSync(filePath);
       const currentSize = stats.size;
 
       if (currentSize < lastSize) {
-        // Log was rotated (game restarted)
         console.log('Log file rotated, re-reading...');
         const fullData = fs.readFileSync(filePath, 'utf8');
         lastSize = fullData.length;
 
-        // Create fresh parser
         const freshParser = new LogParser();
         const events = freshParser.parse(fullData);
 
         for (const event of events) {
           handleGameEvent(event);
         }
+        recordMatchCourses(fullData, events);
       }
     } catch (error) {
       console.error('Error reading log file:', error);
@@ -282,14 +358,17 @@ function startLogWatcher(logPath) {
   logWatcher.on('error', error => {
     console.error('Log watcher error:', error);
     updateTrayStatus('Error watching log');
+    trySendStatus({ status: 'danger', text: 'Error watching log' });
   });
 
   console.log('Started watching log file:', logPath);
   updateTrayStatus('Connected - Watching for matches');
+  trySendStatus({ status: 'success', text: 'Connected - Watching for matches' });
+
   return true;
 }
 
-function handleGameEvent(event) {
+function handleGameEvent(event, { silent = false } = {}) {
   console.log('Game event:', event.type, event.data);
 
   if (!dataStore) {
@@ -300,24 +379,23 @@ function handleGameEvent(event) {
   switch (event.type) {
     case 'MATCH_START':
       updateTrayStatus('Match in progress...');
-      if (mainWindow) {
-        mainWindow.webContents.send('match-started', event.data);
-      }
+      trySendStatus({ status: 'success', text: 'Match in progress...' });
       break;
 
     case 'GAME_END':
-      // Individual game ended - store for later
-      console.log('Game ended, result:', event.data.result);
       break;
 
     case 'MATCH_END':
-      // Match completed
+
       try {
         dataStore.addMatch(event.data);
         console.log('Match saved:', event.data);
-        updateTrayStatus(`Match ended: ${event.data.result}`);
 
-        // Save deck with card data if available
+        if (!silent) {
+          updateTrayStatus(`Match ended: ${event.data.result}`);
+          trySendStatus({ status: 'success', text: `Match ended: ${event.data.result}`, refresh: true });
+        }
+
         if (event.data.playerDeck) {
           console.log('[Deck Save] Saving deck with card data:', JSON.stringify(event.data.playerDeck));
           dataStore.addDeck({
@@ -332,23 +410,16 @@ function handleGameEvent(event) {
           console.log('[Deck Save] No playerDeck data found in event');
         }
 
-        // Send notification
-        if (mainWindow) {
-          mainWindow.webContents.send('match-ended', event.data);
-        }
-
-        // Show tray notification (if enabled in settings)
         const settings = dataStore.getSettings();
         console.log('[Notification] Settings:', settings);
         console.log('[Notification] Tray available:', !!tray);
         console.log('[Notification] Show notifications:', settings.showNotifications);
 
-        if (tray && settings.showNotifications !== false) {
+        if (!silent && tray && settings.showNotifications !== false) {
           const result = event.data.result;
           const emoji = result === 'win' ? '🏆' : result === 'loss' ? '❌' : '🤝';
           console.log('[Notification] Displaying notification');
 
-          // Use balloon on Windows, native on other platforms
           if (process.platform === 'win32') {
             tray.displayBalloon({
               title: 'MTG Arena Tracker',
@@ -359,7 +430,7 @@ function handleGameEvent(event) {
             const notif = new Notification({
               title: 'MTG Arena Tracker',
               body: `${emoji} Match ended: ${result.toUpperCase()}`,
-              icon: path.join(__dirname, 'icon.png')
+              icon: path.join(__dirname, 'images/icon.png')
             });
             notif.show();
           }
@@ -372,12 +443,12 @@ function handleGameEvent(event) {
       break;
 
     case 'INVENTORY_UPDATE':
-      // Inventory data updated
+
       try {
         dataStore.updateInventory(event.data);
         console.log('[Inventory] Updated:', event.data.gems, 'gems,', event.data.gold, 'gold,', event.data.totalVaultProgress, 'vault progress');
         if (mainWindow) {
-          mainWindow.webContents.send('inventory-updated', event.data);
+          mainWindow.webContents.send('inventory-updated', dataStore.getInventory());
           console.log('[Inventory] Sent update to renderer');
         }
       } catch (e) {
@@ -386,19 +457,55 @@ function handleGameEvent(event) {
       break;
 
     case 'DECK_SUBMISSION':
-      // Deck submitted for a match
+
       if (mainWindow) {
         mainWindow.webContents.send('deck-submitted', event.data);
       }
       break;
 
     case 'GRE_TO_CLIENT':
-      // Game state events
+
       break;
   }
 }
 
-// IPC handlers
+function keptMatchIds() {
+  return new Set(dataStore.getMatches().map(match => match.matchId));
+}
+
+function recordMatchCourses(logText, events) {
+  if (!courseStore || !dataStore) {
+    return;
+  }
+  try {
+    courseStore.recordFromEvents(logText, events, keptMatchIds());
+  } catch (error) {
+    console.error('[Course] Error recording match courses:', error);
+  }
+}
+
+function matchLogPaths() {
+  const logPath = getLogPath();
+  return [logPath, getPreviousLogPath(logPath)];
+}
+
+ipcMain.handle('get-match-course', async (event, id) => {
+  if (!dataStore || !courseStore) return null;
+  const match = dataStore.getMatch(id);
+  if (!match) return null;
+
+  const course = await courseStore.get(match.matchId, matchLogPaths());
+  const cards = {};
+  for (const cardId of courseCardIds(course)) {
+    cards[cardId] = {
+      name: dataStore.getCardName(cardId),
+      manaCost: dataStore.getCardManaCost(cardId),
+      scryfallUri: dataStore.getCardScryfallUri(cardId)
+    };
+  }
+  return { match, course, cards };
+});
+
 ipcMain.handle('get-inventory', async () => {
   if (!dataStore) return null;
   return dataStore.getInventory();
@@ -413,18 +520,23 @@ ipcMain.handle('get-deck', async (event, deckId) => {
   if (!dataStore) return null;
   const deck = dataStore.getDeck(deckId);
   if (deck) {
-    // Add card names to the deck data
     const mainDeckWithNames = deck.mainDeck.map(cardId => ({
       cardId,
-      name: dataStore.getCardName(cardId)
+      name: dataStore.getCardName(cardId),
+      manaCost: dataStore.getCardManaCost(cardId),
+      scryfallUri: dataStore.getCardScryfallUri(cardId)
     }));
     const sideboardWithNames = deck.sideboard.map(cardId => ({
       cardId,
-      name: dataStore.getCardName(cardId)
+      name: dataStore.getCardName(cardId),
+      manaCost: dataStore.getCardManaCost(cardId),
+      scryfallUri: dataStore.getCardScryfallUri(cardId)
     }));
     const commandZoneWithNames = deck.commandZone.map(cardId => ({
       cardId,
-      name: dataStore.getCardName(cardId)
+      name: dataStore.getCardName(cardId),
+      manaCost: dataStore.getCardManaCost(cardId),
+      scryfallUri: dataStore.getCardScryfallUri(cardId)
     }));
     return {
       ...deck,
@@ -436,12 +548,29 @@ ipcMain.handle('get-deck', async (event, deckId) => {
   return deck;
 });
 
+ipcMain.handle('get-match-opponent-deck', async (event, matchId) => {
+  if (!dataStore) return null;
+  const match = dataStore.getMatch(matchId);
+  if (!match) return null;
+  const deck = match.opponentDeck || { name: 'Unknown Deck', colors: [], cards: [] };
+  return {
+    name: deck.name,
+    colors: deck.colors,
+    format: match.format,
+    cards: deck.cards.map(cardId => ({
+      cardId,
+      name: dataStore.getCardName(cardId),
+      manaCost: dataStore.getCardManaCost(cardId),
+      scryfallUri: dataStore.getCardScryfallUri(cardId)
+    }))
+  };
+});
+
 ipcMain.handle('get-stats', async () => {
   if (!dataStore) return { matches: [], decks: [] };
   return dataStore.getStats();
 });
 
-// Window control handlers
 ipcMain.on('minimize-window', () => {
   if (mainWindow) mainWindow.minimize();
 });
@@ -463,13 +592,20 @@ ipcMain.handle('get-decks', async () => {
 
 ipcMain.handle('delete-match', async (event, matchId) => {
   if (!dataStore) return false;
+  const match = dataStore.getMatch(matchId);
   dataStore.deleteMatch(matchId);
+  if (match && courseStore) {
+    courseStore.delete(match.matchId);
+  }
   return true;
 });
 
 ipcMain.handle('clear-data', async () => {
   if (!dataStore) return false;
   dataStore.clearAll();
+  if (courseStore) {
+    courseStore.clear();
+  }
   return true;
 });
 
@@ -510,36 +646,26 @@ ipcMain.handle('import-data', async () => {
   return false;
 });
 
-// Debug: manually trigger a log read
 ipcMain.handle('refresh-log', async () => {
   const logPath = getLogPath();
-  if (fs.existsSync(logPath)) {
-    try {
-      const data = fs.readFileSync(logPath, 'utf8');
-      const freshParser = new LogParser();
-      const events = freshParser.parse(data);
-      console.log(`[Manual Refresh] Parsed ${events.length} events from ${data.length} bytes`);
-
-      // Actually save the events!
-      let matchCount = 0;
-      let inventoryUpdated = false;
-      for (const event of events) {
-        handleGameEvent(event);
-        if (event.type === 'MATCH_END') {
-          matchCount++;
-        } else if (event.type === 'INVENTORY_UPDATE') {
-          inventoryUpdated = true;
-        }
-      }
-      console.log(`[Manual Refresh] Processed ${matchCount} matches, inventory updated: ${inventoryUpdated}`);
-
-      return { success: true, eventsFound: events.length, matchesProcessed: matchCount, bytesRead: data.length };
-    } catch (e) {
-      console.error('[Manual Refresh] Error:', e);
-      return { success: false, error: e.message };
-    }
+  if (!fs.existsSync(logPath)) {
+    return { success: false, error: 'Log file not found' };
   }
-  return { success: false, error: 'Log file not found' };
+
+  try {
+    const previous = scanLogForMatches(getPreviousLogPath(logPath), 'Manual Refresh (previous)');
+    const current = scanLogForMatches(logPath, 'Manual Refresh', { includeInventory: true });
+
+    return {
+      success: true,
+      eventsFound: previous.events + current.events,
+      matchesProcessed: previous.matches + current.matches,
+      bytesRead: previous.bytes + current.bytes
+    };
+  } catch (e) {
+    console.error('[Manual Refresh] Error:', e);
+    return { success: false, error: e.message };
+  }
 });
 
 ipcMain.handle('get-log-path', async () => {
@@ -549,6 +675,14 @@ ipcMain.handle('get-log-path', async () => {
 ipcMain.handle('set-log-path', async (event, logPath) => {
   startLogWatcher(logPath);
   return true;
+});
+
+ipcMain.handle('set-zoom', async (event, factor) => {
+  const zoom = clampZoom(factor);
+  if (mainWindow) {
+    mainWindow.webContents.setZoomFactor(zoom);
+  }
+  return zoom;
 });
 
 ipcMain.handle('get-settings', async () => {
@@ -562,10 +696,9 @@ ipcMain.handle('save-settings', async (event, settings) => {
   return true;
 });
 
-// Card database management
 ipcMain.handle('get-card-db-status', async () => {
   try {
-    const cardsPath = path.join(__dirname, 'cards.json');
+    const cardsPath = DataStore.cardsFilePath();
     if (!fs.existsSync(cardsPath)) {
       return { exists: false, cardCount: 0, lastUpdated: null };
     }
@@ -588,13 +721,12 @@ ipcMain.handle('get-card-db-status', async () => {
 
 ipcMain.handle('update-card-db', async () => {
   if (!cardUpdater) {
-    cardUpdater = new CardUpdater();
+    cardUpdater = new CardUpdater(DataStore.cardsFilePath());
   }
 
   try {
-    const result = await cardUpdater.update();
+    const result = await cardUpdater.update({ force: true });
 
-    // Reload cards in data store
     if (dataStore) {
       dataStore.reloadCards();
     }
@@ -612,7 +744,6 @@ ipcMain.handle('update-card-db', async () => {
   }
 });
 
-// Window controls
 ipcMain.on('minimize-window', () => {
   if (mainWindow) mainWindow.minimize();
 });
@@ -631,13 +762,6 @@ ipcMain.on('close-window', () => {
   if (mainWindow) mainWindow.close();
 });
 
-// Open external link
-ipcMain.on('open-external', (event, url) => {
-  console.log('[External Link] Opening:', url);
-  shell.openExternal(url);
-});
-
-// Test notification
 ipcMain.handle('test-notification', async () => {
   try {
     const settings = dataStore.getSettings();
@@ -652,11 +776,9 @@ ipcMain.handle('test-notification', async () => {
       return { success: false, error: 'Notifications are disabled in settings' };
     }
 
-    // Check if we're on Windows (balloon notifications only work reliably there)
     const isWindows = process.platform === 'win32';
     console.log('[Test Notification] Platform:', process.platform);
 
-    // Show notification - try balloon first (Windows), fallback to native
     let notificationMethod = 'balloon';
 
     if (isWindows) {
@@ -667,18 +789,16 @@ ipcMain.handle('test-notification', async () => {
       });
       console.log('[Test Notification] Balloon displayed');
     } else {
-      // Use native Notification API for non-Windows platforms
       notificationMethod = 'native';
       const notification = new Notification({
         title: 'MTG Arena Tracker - Test',
         body: '🏆 This is a test notification! Match ended: WIN',
-        icon: path.join(__dirname, 'icon.png')
+        icon: path.join(__dirname, 'images/icon.png')
       });
       notification.show();
       console.log('[Test Notification] Native notification displayed');
     }
 
-    // Return platform info for troubleshooting
     return {
       success: true,
       platform: process.platform,
@@ -700,14 +820,13 @@ ipcMain.handle('test-notification', async () => {
   }
 });
 
-// App event handlers
 app.whenReady().then(async () => {
   createWindow();
   createTray();
+  trySendStatus({ status: 'success', text: 'Starting...' });
 
-  // Update card database on launch
   console.log('[App] Checking for card database updates...');
-  cardUpdater = new CardUpdater();
+  cardUpdater = new CardUpdater(DataStore.cardsFilePath());
 
   try {
     const updated = await cardUpdater.update();
@@ -718,16 +837,22 @@ app.whenReady().then(async () => {
     }
   } catch (error) {
     console.error('[App] Failed to update card database:', error.message);
-    // Continue anyway - we'll use existing cards or empty database
   }
 
-  // Create data store (will load the updated cards)
   dataStore = new DataStore();
+  courseStore = new CourseStore(dataStore.dataDir);
+  dataStore.onMatchesRetired = matches => matches.forEach(match => courseStore.delete(match.matchId));
+  courseStore.prune(keptMatchIds());
+  applySavedZoom();
 
-  // Start watching the log file
   const logPath = getLogPath();
   console.log('Using log path:', logPath);
+
   startLogWatcher(logPath);
+
+  // Logs are replaced every time Arena starts, so keep what they hold while we can.
+  courseStore.recordFromLogs(matchLogPaths(), Array.from(keptMatchIds()))
+    .catch(error => console.error('[Course] Error recording courses from logs:', error));
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -749,7 +874,6 @@ app.on('before-quit', () => {
   }
 });
 
-// Handle app single instance
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {

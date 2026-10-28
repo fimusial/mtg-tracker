@@ -14,6 +14,7 @@
             --card: #16213e;
             --text: #f1f1f1;
             --text-muted: #888;
+            --text-dim: #a9a9b8;
             --border: #0f3460;
         }
 
@@ -31,7 +32,6 @@
             overflow-x: hidden;
         }
 
-        /* Title Bar */
         .title-bar {
             height: 32px;
             background: var(--card);
@@ -43,10 +43,17 @@
             border-bottom: 1px solid var(--border);
         }
 
+        .title-bar .title-bar-left {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+        }
+
         .title-bar .title {
             font-size: 13px;
             font-weight: 500;
             color: var(--text-muted);
+            margin-right: 7px;
         }
 
         .title-bar .controls {
@@ -72,77 +79,30 @@
             transform: scale(1.1);
         }
 
-        /* About Page Styles */
-        .about-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 0;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .about-item:last-child {
-            border-bottom: none;
-        }
-
-        .about-item .label {
-            color: var(--text-muted);
-        }
-
-        .updates-list {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .update-item {
-            background: var(--bg);
+        .card {
+            background: var(--card);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 15px;
+            border-radius: 5px;
+            padding: 25px;
+            margin-bottom: 20px;
         }
 
-        .update-version {
+        .card:last-child {
+            margin-bottom: 0;
+        }
+
+        .card h3 {
+            margin-bottom: 15px;
             font-size: 16px;
-            font-weight: 600;
-            color: var(--primary);
-            margin-bottom: 5px;
         }
 
-        .update-date {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-bottom: 10px;
-        }
-
-        .update-changes {
-            list-style: none;
-            padding: 0;
-        }
-
-        .update-changes li {
-            padding: 5px 0;
-            padding-left: 20px;
-            position: relative;
-            color: var(--text);
-        }
-
-        .update-changes li::before {
-            content: "•";
-            position: absolute;
-            left: 5px;
-            color: var(--primary);
-        }
-
-        /* Layout */
         .app {
             display: flex;
             height: calc(100vh - 32px);
         }
 
-        /* Sidebar */
         .sidebar {
-            width: 220px;
+            width: 180px;
             background: var(--card);
             border-right: 1px solid var(--border);
             padding: 20px 0;
@@ -174,7 +134,6 @@
             font-size: 18px;
         }
 
-        /* Main Content */
         .main {
             flex: 1;
             overflow: auto;
@@ -189,39 +148,33 @@
             display: block;
         }
 
-        /* Status Bar */
-        .status-bar {
-            position: fixed;
-            bottom: 0;
-            left: 220px;
-            right: 0;
-            height: 30px;
-            background: var(--card);
-            border-top: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            padding: 0 20px;
+        .status-indicator {
             font-size: 12px;
             color: var(--text-muted);
-        }
-
-        .status-bar .status-indicator {
             display: flex;
             align-items: center;
             gap: 6px;
         }
 
         .status-indicator .dot {
+            margin-top: 3px;
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: var(--success);
+            background: var(--text-muted);
             animation: pulse 2s infinite;
         }
 
-        .status-indicator.disconnected .dot {
+        .status-indicator .dot.success {
+            background: var(--success);
+        }
+
+        .status-indicator .dot.warning {
+            background: var(--warning);
+        }
+
+        .status-indicator .dot.danger {
             background: var(--danger);
-            animation: none;
         }
 
         @keyframes pulse {
@@ -229,7 +182,6 @@
             50% { opacity: 0.5; }
         }
 
-        /* Dashboard */
         .page-header {
             margin-bottom: 25px;
         }
@@ -244,7 +196,6 @@
             color: var(--text-muted);
         }
 
-        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -255,7 +206,7 @@
         .stat-card {
             background: var(--card);
             border: 1px solid var(--border);
-            border-radius: 12px;
+            border-radius: 5px;
             padding: 20px;
             text-align: center;
         }
@@ -277,7 +228,6 @@
         .stat-card.losses .value { color: var(--danger); }
         .stat-card.winrate .value { color: var(--primary); }
 
-        /* Format Cards */
         .format-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -288,36 +238,47 @@
         .format-card {
             background: var(--card);
             border: 1px solid var(--border);
-            border-radius: 12px;
+            border-radius: 5px;
             padding: 20px;
+            display: flex;
+            flex-direction: column;
         }
 
         .format-card h4 {
             margin-bottom: 15px;
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
+            gap: 10px;
         }
 
         .format-card .format-name {
             font-size: 16px;
             font-weight: 600;
+            min-width: 0;
+            line-height: 1.3;
+            overflow-wrap: break-word;
         }
 
         .format-card .format-badge {
             background: var(--primary);
             padding: 4px 10px;
-            border-radius: 20px;
+            border-radius: 5px;
             font-size: 11px;
+            flex-shrink: 0;
+            white-space: nowrap;
         }
 
         .format-stats {
             display: flex;
             justify-content: space-between;
+            gap: 8px;
             margin-bottom: 15px;
         }
 
         .mini-stat {
+            flex: 1;
+            min-width: 0;
             text-align: center;
         }
 
@@ -331,23 +292,24 @@
             font-size: 11px;
             color: var(--text-muted);
             text-transform: uppercase;
+            white-space: nowrap;
         }
 
         .winrate-bar {
             height: 6px;
+            flex-shrink: 0;
             background: var(--border);
-            border-radius: 3px;
+            border-radius: 5px;
             overflow: hidden;
         }
 
         .winrate-bar .fill {
             height: 100%;
             background: linear-gradient(90deg, var(--success), #16a34a);
-            border-radius: 3px;
+            border-radius: 5px;
             transition: width 0.3s;
         }
 
-        /* Match List */
         .match-list {
             display: flex;
             flex-direction: column;
@@ -362,7 +324,7 @@
             padding: 15px;
             background: var(--card);
             border: 1px solid var(--border);
-            border-radius: 10px;
+            border-radius: 5px;
             border-left: 4px solid var(--primary);
         }
 
@@ -372,7 +334,7 @@
 
         .match-badge {
             padding: 5px 12px;
-            border-radius: 20px;
+            border-radius: 5px;
             font-size: 11px;
             font-weight: 600;
             text-transform: uppercase;
@@ -386,6 +348,39 @@
             margin-bottom: 4px;
         }
 
+        .matchup {
+            display: inline-flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .matchup .versus {
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin: 0 4px;
+        }
+
+        .matchup .opponent-side {
+            color: var(--text-dim);
+        }
+
+        .matchup .deck-link {
+            cursor: pointer;
+            border-bottom: 1px dotted transparent;
+        }
+
+        .matchup .deck-link:hover {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .matchup .mana-symbols {
+            margin-left: 4px;
+        }
+
         .match-info p {
             font-size: 13px;
             color: var(--text-muted);
@@ -397,7 +392,6 @@
             color: var(--text-muted);
         }
 
-        /* Tables */
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -424,15 +418,28 @@
         .positive { color: var(--success); }
         .negative { color: var(--danger); }
 
-        /* Buttons */
         .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
             padding: 10px 20px;
             border: none;
-            border-radius: 8px;
+            border-radius: 5px;
             cursor: pointer;
             font-size: 14px;
             font-weight: 500;
+            text-decoration: none;
             transition: all 0.2s;
+        }
+
+        .btn:disabled {
+            cursor: default;
+            background: gray;
+        }
+
+        .btn:disabled:hover {
+            background: gray;
         }
 
         .btn-primary {
@@ -450,7 +457,7 @@
         }
 
         .btn-secondary:hover {
-            background: var(--card);
+            background: #4b4dd1;
         }
 
         .btn-danger {
@@ -458,7 +465,10 @@
             color: white;
         }
 
-        /* Empty State */
+        .btn-danger:hover {
+            background: #ff0000;
+        }
+
         .empty-state {
             text-align: center;
             padding: 60px;
@@ -470,11 +480,10 @@
             margin-bottom: 15px;
         }
 
-        /* Settings */
         .settings-group {
             background: var(--card);
             border: 1px solid var(--border);
-            border-radius: 12px;
+            border-radius: 5px;
             padding: 25px;
             margin-bottom: 20px;
         }
@@ -485,11 +494,19 @@
         }
 
         .form-row {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 15px;
-            align-items: center;
-            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 22px;
+        }
+
+        .form-row > * {
+            align-self: stretch;
+        }
+
+        #page-settings .btn {
+            width: 200px;
+            align-self: flex-start;
         }
 
         .form-row:last-child {
@@ -507,7 +524,7 @@
             padding: 10px 15px;
             background: var(--bg);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 5px;
             color: var(--text);
             font-size: 14px;
         }
@@ -517,7 +534,27 @@
             border-color: var(--primary);
         }
 
-        /* Checkbox */
+        .form-row .zoom-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+
+        .form-row .zoom-row input[type="range"] {
+            flex: 1;
+            max-width: 260px;
+            accent-color: #4b4dd1;
+            cursor: pointer;
+        }
+
+        .form-row .zoom-row .zoom-value {
+            min-width: 48px;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
         .checkbox-row {
             display: flex;
             align-items: center;
@@ -531,28 +568,32 @@
             cursor: pointer;
         }
 
-        /* Scrollbar */
         ::-webkit-scrollbar {
-            width: 8px;
+            width: 6px;
+            height: 6px;
         }
 
         ::-webkit-scrollbar-track {
-            background: var(--bg);
+            background: transparent;
         }
 
         ::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 4px;
+            background: color-mix(in srgb, var(--border) 70%, transparent);
+            border-radius: 5px;
         }
 
         ::-webkit-scrollbar-thumb:hover {
-            background: var(--primary);
+            background: var(--border);
         }
 
-        /* Inventory Widget */
+        .inventory-empty {
+            color: var(--text-muted);
+            margin-bottom: 30px;
+        }
+
         .inventory-widget {
             background: var(--card);
-            border-radius: 12px;
+            border-radius: 5px;
             padding: 20px;
             margin-bottom: 30px;
             border: 1px solid var(--border);
@@ -575,7 +616,7 @@
             gap: 10px;
             padding: 12px 16px;
             background: var(--bg);
-            border-radius: 8px;
+            border-radius: 5px;
         }
 
         .inventory-item .label {
@@ -603,7 +644,7 @@
             width: 100px;
             height: 6px;
             background: var(--border);
-            border-radius: 3px;
+            border-radius: 5px;
             margin-left: auto;
             overflow: hidden;
         }
@@ -611,13 +652,20 @@
         .inventory-item.vault .progress-bar .fill {
             height: 100%;
             background: linear-gradient(90deg, var(--success), var(--warning));
-            border-radius: 3px;
+            border-radius: 5px;
             transition: width 0.3s ease;
         }
 
-        /* Deck Card Hover */
         .deck-card {
             transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .deck-card .deck-hint {
+            margin-top: auto;
+            padding-top: 10px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
         }
 
         .deck-card:hover {
@@ -625,7 +673,6 @@
             box-shadow: 0 8px 24px rgba(0,0,0,0.3);
         }
 
-        /* Modal */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -642,7 +689,7 @@
 
         .modal-content {
             background: var(--card);
-            border-radius: 16px;
+            border-radius: 5px;
             width: 100%;
             max-width: 800px;
             max-height: 90vh;
@@ -671,7 +718,7 @@
             margin-bottom: 20px;
             padding: 15px;
             background: var(--bg);
-            border-radius: 8px;
+            border-radius: 5px;
         }
 
         .deck-info p {
@@ -691,21 +738,52 @@
 
         .card-list {
             background: var(--bg);
-            border-radius: 8px;
+            border-radius: 5px;
             padding: 15px;
+            max-height: 45vh;
+            overflow-y: auto;
         }
 
         .card-list-items {
             list-style: none;
-            columns: 2;
-            column-gap: 20px;
         }
 
         .card-list-items li {
             padding: 4px 0;
             color: var(--text);
             font-size: 14px;
-            break-inside: avoid;
+            overflow-wrap: break-word;
+        }
+
+        .card-cost {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        .card-cost .mana-text {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .card-list-items .card-link {
+            color: inherit;
+            text-decoration: none;
+            border-bottom: 1px dotted var(--text-muted);
+        }
+
+        .card-list-items .card-link:hover {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .card-cost .mana-split {
+            margin: 0 2px;
+            font-size: 12px;
+            color: var(--text-muted);
         }
 
         .card-list .empty {
@@ -714,18 +792,519 @@
             padding: 20px;
         }
 
-        /* Deck Lists Grid */
+        .mana-symbols {
+            display: inline-flex;
+            gap: 3px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        .mana-symbol {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+        }
+
+        .modal-header .mana-symbol,
+        .format-card .mana-symbol {
+            width: 16px;
+            height: 16px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            margin: 30px 0 20px;
+            flex-wrap: wrap;
+        }
+
+        .section-header:first-of-type {
+            margin-top: 0;
+        }
+
+        .section-header .hint {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
         .deck-lists {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
         }
+
+        .combat-board {
+            position: relative;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .combat-arrows {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .combat-arrow {
+            fill: none;
+            stroke: var(--primary);
+            stroke-width: 2.5;
+            stroke-linecap: round;
+        }
+
+        .combat-arrow.illegal {
+            stroke: var(--danger);
+            stroke-dasharray: 6 4;
+        }
+
+        .combat-arrow.pending {
+            stroke: var(--warning);
+            stroke-dasharray: 6 4;
+        }
+
+        .combat-side {
+            padding: 16px 20px 24px;
+        }
+
+        .combat-side-header {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .combat-side-header h2 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .combat-count {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .combat-add {
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 5px;
+            background: var(--primary);
+            color: white;
+            font-size: 18px;
+            line-height: 24px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .combat-add:hover {
+            background: #4b4dd1;
+        }
+
+        .combat-add:disabled {
+            background: gray;
+            cursor: default;
+        }
+
+        .combat-attacking-player {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .combat-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 16px;
+            min-height: 160px;
+        }
+
+        .combat-empty {
+            align-self: center;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .combat-divider {
+            border-top: 2px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+            margin: 0 20px;
+        }
+
+        .combat-creature {
+            position: relative;
+            z-index: 2;
+            width: 160px;
+            min-height: 160px;
+            padding: 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+
+        .combat-creature:hover {
+            border-color: var(--primary);
+        }
+
+        .combat-creature.dead {
+            background: color-mix(in srgb, var(--danger) 8%, var(--bg));
+            border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+        }
+
+        .combat-creature.illegal {
+            border-color: var(--danger);
+        }
+
+        .combat-creature.selected {
+            border-color: var(--warning);
+            box-shadow: 0 0 0 2px var(--warning);
+        }
+
+        .combat-creature.menu-open {
+            z-index: 30;
+        }
+
+        .combat-creature-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .combat-creature-label {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        .combat-remove {
+            padding: 2px 5px;
+            border: none;
+            border-radius: 4px;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .combat-remove:hover {
+            color: var(--danger);
+            background: rgba(239, 68, 68, 0.12);
+        }
+
+        .combat-pt {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .combat-pt input,
+        .combat-kw-value {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            color: var(--text);
+            text-align: center;
+        }
+
+        .combat-pt input {
+            width: 38px;
+            padding: 4px 0;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .combat-pt input:focus,
+        .combat-kw-value:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .combat-pt input::-webkit-inner-spin-button,
+        .combat-pt input::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .combat-pt-slash {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-muted);
+        }
+
+        .combat-damage {
+            margin-left: 2px;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--danger);
+        }
+
+        .combat-kw {
+            position: relative;
+            margin-top: 10px;
+        }
+
+        .combat-kw-toggle {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 8px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            color: var(--text);
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .combat-kw-toggle:hover,
+        .combat-creature.menu-open .combat-kw-toggle {
+            border-color: var(--primary);
+        }
+
+        .combat-kw-caret {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .combat-kw-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            width: 220px;
+            max-height: 280px;
+            overflow-y: auto;
+            padding: 6px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            cursor: default;
+        }
+
+        .combat-creature.menu-open .combat-kw-menu {
+            display: block;
+        }
+
+        .combat-creature.menu-right .combat-kw-menu {
+            left: auto;
+            right: 0;
+        }
+
+        .combat-kw-option {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .combat-kw-option:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .combat-kw-option label {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 3px 0;
+            cursor: pointer;
+        }
+
+        .combat-kw-option input[type="checkbox"] {
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        .combat-kw-value {
+            width: 40px;
+            padding: 2px 4px;
+            font-size: 12px;
+        }
+
+        .combat-kw-value:disabled {
+            opacity: 0.4;
+        }
+
+        .combat-kw-chips,
+        .combat-status {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .combat-kw-chips:not(:empty) {
+            margin-top: 8px;
+        }
+
+        /* Room for two rows of results, so cards don't change height as combat is recomputed */
+        .combat-status {
+            align-content: flex-start;
+            min-height: 38px;
+            margin-top: 8px;
+        }
+
+        .combat-chip,
+        .combat-pill {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+
+        .combat-chip {
+            background: rgba(93, 95, 239, 0.18);
+            color: #c7c8ff;
+        }
+
+        .combat-pill {
+            max-width: 100%;
+            font-weight: 600;
+            white-space: normal;
+        }
+
+        .combat-pill.good { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+        .combat-pill.bad { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+        .combat-pill.hit { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+        .combat-pill.poison { background: rgba(163, 230, 53, 0.15); color: #a3e635; }
+        .combat-pill.muted { background: rgba(255, 255, 255, 0.06); color: var(--text-dim); }
+
+        .combat-player {
+            position: relative;
+            z-index: 2;
+            max-width: 380px;
+            margin: 24px auto 0;
+            padding: 14px 20px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .combat-player.hit {
+            border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+        }
+
+        .combat-player.illegal {
+            border-color: var(--danger);
+            text-align: left;
+        }
+
+        .combat-player-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+
+        .combat-player.illegal .combat-player-title {
+            text-align: center;
+            color: var(--danger);
+        }
+
+        .combat-player-damage {
+            margin-top: 4px;
+            font-size: 36px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .combat-player.hit .combat-player-damage {
+            color: var(--danger);
+        }
+
+        .combat-player-caption {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .combat-player-effects {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .combat-problems {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin: 8px 0 0 18px;
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+
+        .combat-log {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 12px 20px;
+            margin-bottom: 20px;
+        }
+
+        .combat-log summary {
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-dim);
+        }
+
+        .combat-log-step h4 {
+            margin: 12px 0 4px;
+            font-size: 13px;
+            color: var(--text);
+        }
+
+        .combat-log-step ul {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-left: 18px;
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+
+        .combat-log-empty {
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .combat-actions {
+            display: flex;
+            justify-content: center;
+        }
     </style>
+    <link rel="stylesheet" href="matchCourse/courseView.css">
+    <link rel="stylesheet" href="matchHistory/matchPager.css">
 </head>
 <body>
-    <!-- Title Bar -->
+
     <div class="title-bar">
-        <div class="title">MTG Arena Tracker</div>
+        <div class="title-bar-left">
+            <div class="title">
+                <span>MTG Arena Tracker</span>
+            </div>
+            <div class="status-indicator" id="status-indicator">
+                <div class="dot"></div>
+                <span id="status-text"></span>
+            </div>
+        </div>
         <div class="controls">
             <button class="minimize" onclick="minimizeWindow()" title="Minimize"></button>
             <button class="maximize" onclick="maximizeWindow()" title="Maximize/Restore"></button>
@@ -734,7 +1313,7 @@
     </div>
 
     <div class="app">
-        <!-- Sidebar -->
+
         <nav class="sidebar">
             <div class="nav-item active" onclick="showPage('dashboard')">
                 <span class="icon">📊</span>
@@ -748,23 +1327,22 @@
                 <span class="icon">🎴</span>
                 <span>Decks</span>
             </div>
-            <div class="nav-item" onclick="showPage('stats')">
+            <div class="nav-item" onclick="showPage('formats')">
                 <span class="icon">📈</span>
-                <span>Statistics</span>
+                <span>Formats</span>
+            </div>
+            <div class="nav-item" onclick="showPage('calculator')">
+                <span class="icon">🧮</span>
+                <span>Combat</span>
             </div>
             <div class="nav-item" onclick="showPage('settings')">
                 <span class="icon">⚙️</span>
                 <span>Settings</span>
             </div>
-            <div class="nav-item" onclick="showPage('about')">
-                <span class="icon">ℹ️</span>
-                <span>About</span>
-            </div>
         </nav>
 
-        <!-- Main Content -->
         <main class="main">
-            <!-- Dashboard Page -->
+
             <div class="page active" id="page-dashboard">
                 <div class="page-header">
                     <h1>Dashboard</h1>
@@ -798,14 +1376,6 @@
                     </div>
                 </div>
 
-                <h2 style="margin-bottom: 20px;">Performance by Format</h2>
-                <div class="format-grid" id="format-stats">
-                    <div class="empty-state" style="grid-column: 1 / -1;">
-                        <div class="icon">🎮</div>
-                        <p>No matches recorded yet. Start playing MTG Arena!</p>
-                    </div>
-                </div>
-
                 <h2 style="margin-bottom: 20px;">Recent Matches</h2>
                 <div class="match-list" id="recent-matches">
                     <div class="empty-state">
@@ -815,11 +1385,10 @@
                 </div>
             </div>
 
-            <!-- Matches Page -->
             <div class="page" id="page-matches">
                 <div class="page-header">
                     <h1>Match History</h1>
-                    <p>All your recorded matches</p>
+                    <p id="matches-count">All your recorded matches</p>
                 </div>
                 <div id="all-matches">
                     <div class="empty-state">
@@ -829,12 +1398,12 @@
                 </div>
             </div>
 
-            <!-- Decks Page -->
             <div class="page" id="page-decks">
                 <div class="page-header">
-                    <h1>Your Decks</h1>
+                    <h1>Decks</h1>
                     <p>Performance by deck</p>
                 </div>
+
                 <div id="decks-list">
                     <div class="empty-state">
                         <div class="icon">🎴</div>
@@ -843,14 +1412,15 @@
                 </div>
             </div>
 
-            <!-- Stats Page -->
-            <div class="page" id="page-stats">
+            <div class="page" id="page-formats">
                 <div class="page-header">
-                    <h1>Statistics</h1>
-                    <p>Detailed performance analysis</p>
+                    <h1>Formats</h1>
+                    <p>How you perform in each format and event</p>
                 </div>
 
-                <h2 style="margin-bottom: 20px;">Format Breakdown</h2>
+                <div class="section-header">
+                    <h2>Format Breakdown</h2>
+                </div>
                 <table class="data-table" id="stats-formats-table">
                     <thead>
                         <tr>
@@ -865,22 +1435,59 @@
                     <tbody></tbody>
                 </table>
 
-                <h2 style="margin: 30px 0 20px;">Deck Performance</h2>
-                <table class="data-table" id="stats-decks-table">
-                    <thead>
-                        <tr>
-                            <th>Deck</th>
-                            <th>Matches</th>
-                            <th>Wins</th>
-                            <th>Losses</th>
-                            <th>Win Rate</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
+                <div class="section-header">
+                    <h2>Format Cards</h2>
+                </div>
+                <div class="format-grid" id="formats-grid">
+                    <div class="empty-state" style="grid-column: 1 / -1;">
+                        <div class="icon">📈</div>
+                        <p>No matches recorded yet.</p>
+                    </div>
+                </div>
             </div>
 
-            <!-- Settings Page -->
+            <div class="page" id="page-calculator">
+                <div class="page-header">
+                    <h1>Combat Calculator</h1>
+                    <p>Click a defender and then an attacker to block it. Click a defender twice to stop it blocking.</p>
+                </div>
+
+                <div class="combat-board" id="combat-board" onclick="onCombatBoardClick(event)">
+                    <svg class="combat-arrows" id="combat-arrows" aria-hidden="true"></svg>
+
+                    <section class="combat-side">
+                        <div class="combat-side-header">
+                            <button class="combat-add" id="combat-add-attacker" title="Add attacker" onclick="addCombatCreature('attacker')">+</button>
+                            <h2>Attackers</h2>
+                            <span class="combat-count" id="combat-count-attacker"></span>
+                            <div class="combat-attacking-player" id="combat-attacking-player"></div>
+                        </div>
+                        <div class="combat-row" id="combat-attackers"></div>
+                    </section>
+
+                    <div class="combat-divider"></div>
+
+                    <section class="combat-side">
+                        <div class="combat-side-header">
+                            <button class="combat-add" id="combat-add-defender" title="Add defender" onclick="addCombatCreature('defender')">+</button>
+                            <h2>Defenders</h2>
+                            <span class="combat-count" id="combat-count-defender"></span>
+                        </div>
+                        <div class="combat-row" id="combat-defenders"></div>
+                        <div class="combat-player" id="combat-player"></div>
+                    </section>
+                </div>
+
+                <details class="combat-log">
+                    <summary>Combat breakdown</summary>
+                    <div id="combat-log-body"></div>
+                </details>
+
+                <div class="combat-actions">
+                    <button class="btn btn-secondary" onclick="resetCombat()">Reset</button>
+                </div>
+            </div>
+
             <div class="page" id="page-settings">
                 <div class="page-header">
                     <h1>Settings</h1>
@@ -888,68 +1495,63 @@
                 </div>
 
                 <div class="settings-group">
-                    <h3>Log File Location</h3>
+                    <h3>Log Files</h3>
                     <div class="form-row">
-                        <div style="flex: 1;">
-                            <label>Log Path</label>
-                            <input type="text" id="log-path-input" placeholder="Path to MTGA Player.log">
-                        </div>
-                        <button class="btn btn-primary" onclick="browseLogPath()">Browse</button>
-                    </div>
-                    <div class="form-row">
-                        <span>Scan log for matches now</span>
                         <button class="btn btn-primary" onclick="scanLogNow()">Scan Now</button>
+                        <small style="color: var(--text-muted);">
+                            <ul>
+                            <li><span style="color: var(--danger);">Before using the tracker, make sure you have started MTG Arena and enabled Detailed Logs (Options > Account)</span></li>
+                            <li>Tracker reads all information as a live stream from Player.log and Player-prev.log.</li>
+                            <li>Collection/Inventory information updates are visible only after MTG Arena is restarted.</li>
+                            <li>The log files must be located at: <b style="word-break: break-all;">%USERPROFILE%/AppData/LocalLow/Wizards Of The Coast/MTGA</b></li>
+                            </ul>
+                        </small>
                     </div>
-                    <small style="color: var(--text-muted);">
-                        Default: %USERPROFILE%\AppData\LocalLow\Wizards Of The Coast\MTGA\Player.log
-                    </small>
                 </div>
 
                 <div class="settings-group">
                     <h3>Preferences</h3>
                     <div class="form-row">
                         <label class="checkbox-row">
-                            <input type="checkbox" id="setting-minimize">
+                            <input type="checkbox" id="setting-minimize" onchange="saveSettings()">
                             <span>Minimize to system tray</span>
                         </label>
                     </div>
                     <div class="form-row">
                         <label class="checkbox-row">
-                            <input type="checkbox" id="setting-notifications">
+                            <input type="checkbox" id="setting-notifications" onchange="saveSettings()">
                             <span>Show match result notifications</span>
                         </label>
                     </div>
                     <div class="form-row">
-                        <span>Test notification system</span>
-                        <button class="btn btn-secondary" onclick="testNotification()">Test Notification</button>
+                        <label class="zoom-row">
+                            <span>Interface zoom</span>
+                            <input type="range" id="setting-zoom" min="80" max="150" step="5" value="100"
+                                   oninput="showZoomValue(this.value)" onchange="commitZoom(this.value)">
+                            <span class="zoom-value" id="setting-zoom-value">100%</span>
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <button class="btn btn-secondary" onclick="testNotification()">Test notification system</button>
                     </div>
                 </div>
 
                 <div class="settings-group">
                     <h3>Card Database</h3>
                     <div class="form-row">
+                        <button id="update-card-database-button"
+                            class="btn btn-primary"
+                            onclick="updateCardDatabase()">
+                            Update Now
+                        </button>
                         <div>
                             <div id="card-db-status">Checking card database...</div>
-                            <small style="color: var(--text-muted);" id="card-db-details"></small>
-                        </div>
-                        <button class="btn btn-primary" onclick="updateCardDatabase()">Update Now</button>
-                    </div>
-                    <small style="color: var(--text-muted);">
-                        The card database is automatically updated from Scryfall when needed. Last updated: <span id="card-db-last-update">Unknown</span>
-                    </small>
-                </div>
-
-                <div class="settings-group">
-                    <h3>Inventory Sync</h3>
-                    <div class="form-row">
-                        <div>
-                            <div>Inventory data updates when MTG Arena writes to the log</div>
+                            <small style="color: var(--text-muted);" id="card-db-details"></small><br />
                             <small style="color: var(--text-muted);">
-                                Note: Pack/gold counts shown may not match in-game if earned after MTG Arena started.
-                                <br>Restart MTG Arena for the tracker to see the latest inventory.
+                                The card database is automatically updated from Scryfall when needed.<br />
+                                Last updated: <span id="card-db-last-update">Unknown</span>
                             </small>
                         </div>
-                        <button class="btn btn-primary" onclick="scanLogNow()">Scan Now</button>
                     </div>
                 </div>
 
@@ -968,76 +1570,14 @@
                         <button class="btn btn-danger" onclick="clearAllData()">Clear Data</button>
                     </div>
                 </div>
-
-                <div style="margin-top: 20px;">
-                    <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
-                </div>
-            </div>
-
-            <!-- About Page -->
-            <div class="page" id="page-about">
-                <div class="page-header">
-                    <h1>About</h1>
-                    <p>MTG Arena Tracker - Track your matches and stats</p>
-                </div>
-
-                <div class="card">
-                    <h3>Version</h3>
-                    <div class="about-item">
-                        <span class="label">Current Version:</span>
-                        <span class="value" style="font-size: 18px; font-weight: 600; color: var(--primary);">v0.0.1</span>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>GitHub Repository</h3>
-                    <p style="margin-bottom: 15px;">View the source code, report issues, or contribute to the project:</p>
-                    <a href="#" onclick="openExternalLink('https://github.com/Shalkith/MTG-Arena-Tracker')" class="btn btn-primary">
-                        🐙 Open GitHub Repository
-                    </a>
-                </div>
-
-                <div class="card">
-                    <h3>Recent Updates</h3>
-                    <div class="updates-list">
-                        <div class="update-item">
-                            <div class="update-version">v0.0.1</div>
-                            <div class="update-date">2026-03-01</div>
-                            <ul class="update-changes">
-                                <li>Initial release with automatic match tracking</li>
-                                <li>Real-time log parsing and win/loss detection</li>
-                                <li>Card database auto-updates from Scryfall</li>
-                                <li>Deck detection with full card lists</li>
-                                <li>Inventory tracking (gems, gold, wildcards, packs)</li>
-                                <li>Format grouping and statistics</li>
-                                <li>Borderless window with custom controls</li>
-                                <li>Tray notifications and system tray integration</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>Credits</h3>
-                    <p>Built with ❤️ using:</p>
-                    <ul style="color: var(--text-muted); margin-top: 10px;">
-                        <li><a href="#" onclick="openExternalLink('https://electronjs.org')">Electron</a> - Desktop app framework</li>
-                        <li><a href="#" onclick="openExternalLink('https://scryfall.com')">Scryfall</a> - Card database API</li>
-                        <li><a href="#" onclick="openExternalLink('https://github.com/paulmillr/chokidar')">Chokidar</a> - File watching</li>
-                    </ul>
-                </div>
             </div>
         </main>
-
-        <!-- Status Bar -->
-        <div class="status-bar">
-            <div class="status-indicator" id="status-indicator">
-                <div class="dot"></div>
-                <span id="status-text">Connected - Watching for matches</span>
-            </div>
-        </div>
     </div>
 
     <script src="renderer.js"></script>
+    <script src="combatCalculator/combatEngine.js"></script>
+    <script src="combatCalculator/combatCalculator.js"></script>
+    <script src="matchCourse/courseView.js"></script>
+    <script src="matchHistory/matchPager.js"></script>
 </body>
 </html>

@@ -39,10 +39,6 @@ Desktop.ini
 .env.local
 .env.*.local
 
-# Test files
-test-*.js
-!test-parser.js
-
 # Temporary files
 tmp/
 temp/
@@ -50,3 +46,4 @@ temp/
 
 # Downloaded files
 cards.json
+*.jsonl

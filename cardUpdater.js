@@ -1,32 +1,56 @@
-/**
- * Card Database Updater
- * Fetches MTG Arena card data from Scryfall bulk API
- */
-
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
+const readline = require('readline');
 
 const BULK_DATA_URL = 'https://api.scryfall.com/bulk-data';
-const CARDS_FILE = path.join(__dirname, 'cards.json');
-const UPDATE_INTERVAL_HOURS = 24; // Update once per day
+const COLOR_ORDER = ['W', 'U', 'B', 'R', 'G', 'C'];
+const UPDATE_INTERVAL_HOURS = 24;
+const REQUEST_TIMEOUT_MS = 60000;
+const MAX_REDIRECTS = 5;
+
+function removeQueryStringFromUri(uri) {
+  const query = uri.indexOf('?');
+  return query === -1 ? uri : uri.slice(0, query);
+}
+
+function extractScryfallUri(card) {
+  const uri = typeof card.scryfall_uri === 'string' ? card.scryfall_uri : '';
+  if (!uri) {
+    return '';
+  }
+
+  return removeQueryStringFromUri(uri);
+}
+
+function extractColors(card, isLand) {
+  if (isLand && Array.isArray(card.produced_mana))
+  {
+    return COLOR_ORDER.filter(color => card.produced_mana.includes(color));
+  }
+
+  const colors = Array.isArray(card.colors)
+    ? card.colors
+    : (card.card_faces || []).reduce((all, face) => all.concat(face.colors || []), []);
+
+  return COLOR_ORDER.filter(color => colors.includes(color));
+}
 
 class CardUpdater {
-  constructor() {
+  constructor(cardsFile) {
+    this.cardsFile = cardsFile;
     this.cardsData = { cards: {}, lastUpdated: null };
   }
 
-  /**
-   * Check if update is needed (last update was more than UPDATE_INTERVAL_HOURS ago)
-   */
   needsUpdate() {
     try {
-      if (!fs.existsSync(CARDS_FILE)) {
+      if (!fs.existsSync(this.cardsFile)) {
         console.log('[CardUpdater] cards.json does not exist, update needed');
         return true;
       }
 
-      const content = fs.readFileSync(CARDS_FILE, 'utf8');
+      const content = fs.readFileSync(this.cardsFile, 'utf8');
       const data = JSON.parse(content);
 
       if (!data.lastUpdated) {
@@ -47,14 +71,11 @@ class CardUpdater {
       return false;
     } catch (error) {
       console.error('[CardUpdater] Error checking update status:', error.message);
-      return true; // Update on error to be safe
+      return true;
     }
   }
 
-  /**
-   * Fetch JSON from URL
-   */
-  fetchJSON(url) {
+  request(url, redirectsLeft = MAX_REDIRECTS) {
     return new Promise((resolve, reject) => {
       const options = {
         headers: {
@@ -63,20 +84,45 @@ class CardUpdater {
         }
       };
 
-      https.get(url, options, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          // Follow redirect
-          https.get(res.headers.location, options, (redirectRes) => {
-            handleResponse(redirectRes, resolve, reject);
-          }).on('error', reject);
-        } else {
-          handleResponse(res, resolve, reject);
-        }
-      }).on('error', reject);
-    });
+      const req = https.get(url, options, (res) => {
+        const { statusCode, headers } = res;
 
-    function handleResponse(res, resolve, reject) {
+        if (statusCode >= 300 && statusCode < 400 && headers.location) {
+          res.resume();
+
+          if (redirectsLeft === 0) {
+            reject(new Error(`Too many redirects for ${url}`));
+            return;
+          }
+
+          const target = new URL(headers.location, url).toString();
+          this.request(target, redirectsLeft - 1).then(resolve, reject);
+          return;
+        }
+
+        if (statusCode !== 200) {
+          res.resume();
+          reject(new Error(`Request for ${url} failed with status ${statusCode}`));
+          return;
+        }
+
+        resolve(res);
+      });
+
+      req.on('error', reject);
+
+      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+        req.destroy(new Error(`No data for ${REQUEST_TIMEOUT_MS / 1000}s, aborting request for ${url}`));
+      });
+    });
+  }
+
+  async fetchJSON(url) {
+    const res = await this.request(url);
+
+    return new Promise((resolve, reject) => {
       let data = '';
+      res.setEncoding('utf8');
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {
@@ -86,18 +132,13 @@ class CardUpdater {
         }
       });
       res.on('error', reject);
-    }
+    });
   }
 
-  /**
-   * Download and process the bulk card data
-   * Uses streaming to handle large files efficiently
-   */
   async downloadCards() {
     console.log('[CardUpdater] Starting card database update...');
 
     try {
-      // Step 1: Get the bulk data info
       console.log('[CardUpdater] Fetching bulk data info from Scryfall...');
       const bulkInfo = await this.fetchJSON(BULK_DATA_URL);
 
@@ -106,17 +147,15 @@ class CardUpdater {
         throw new Error('Could not find default_cards bulk data');
       }
 
-      console.log(`[CardUpdater] Found default cards dataset: ${(defaultCards.size / 1024 / 1024).toFixed(1)} MB`);
+      console.log(`[CardUpdater] Found default cards dataset: ${(defaultCards.compressed_size / 1024 / 1024).toFixed(1)} MB compressed`);
       console.log(`[CardUpdater] Last updated: ${defaultCards.updated_at}`);
-      console.log(`[CardUpdater] Download URL: ${defaultCards.download_uri}`);
+      console.log(`[CardUpdater] Download URL: ${defaultCards.jsonl_download_uri}`);
 
-      // Step 2: Download and process the card data
       console.log('[CardUpdater] Downloading card data (this may take 30-60 seconds)...');
       console.log('[CardUpdater] Processing cards with Arena IDs only...');
 
-      const cards = await this.downloadAndProcessCards(defaultCards.download_uri);
+      const cards = await this.downloadAndProcessCards(defaultCards.jsonl_download_uri);
 
-      // Step 3: Save the processed data
       this.cardsData = {
         cards: cards,
         lastUpdated: new Date().toISOString(),
@@ -124,10 +163,10 @@ class CardUpdater {
         sourceUpdatedAt: defaultCards.updated_at
       };
 
-      // Write to temp file first, then rename for atomic operation
-      const tempFile = CARDS_FILE + '.tmp';
+      fs.mkdirSync(path.dirname(this.cardsFile), { recursive: true });
+      const tempFile = this.cardsFile + '.tmp';
       fs.writeFileSync(tempFile, JSON.stringify(this.cardsData, null, 2));
-      fs.renameSync(tempFile, CARDS_FILE);
+      fs.renameSync(tempFile, this.cardsFile);
 
       const cardCount = Object.keys(cards).length;
       console.log(`[CardUpdater] Successfully saved ${cardCount} cards with Arena IDs to cards.json`);
@@ -138,12 +177,10 @@ class CardUpdater {
       }
 
       return true;
-
     } catch (error) {
       console.error('[CardUpdater] Error updating cards:', error.message);
 
-      // If we have existing cards, keep using them
-      if (fs.existsSync(CARDS_FILE)) {
+      if (fs.existsSync(this.cardsFile)) {
         console.log('[CardUpdater] Keeping existing cards.json');
         return false;
       }
@@ -152,151 +189,96 @@ class CardUpdater {
     }
   }
 
-  /**
-   * Download the large JSON file and extract Arena cards
-   * Uses streaming for memory efficiency
-   */
-  downloadAndProcessCards(url) {
+  async downloadAndProcessCards(url) {
+    const res = await this.request(url);
+
     return new Promise((resolve, reject) => {
       const cards = {};
       let processed = 0;
       let withArenaId = 0;
-      let buffer = '';
 
-      const options = {
-        headers: {
-          'User-Agent': 'MTG-Arena-Tracker/1.0',
-          'Accept': 'application/json'
-        }
-      };
+      res.on('error', (err) => {
+        reject(new Error(`Stream error: ${err.message}`));
+      });
 
-      https.get(url, options, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          https.get(res.headers.location, options, (redirectRes) => {
-            processStream(redirectRes);
-          }).on('error', reject);
-        } else {
-          processStream(res);
-        }
-      }).on('error', reject);
+      const contentEncoding = (res.headers['content-encoding'] || '').toLowerCase();
+      const contentType = (res.headers['content-type'] || '').toLowerCase();
+      const isGzip = contentEncoding.includes('gzip') ||
+        contentType.includes('gzip') ||
+        new URL(url).pathname.endsWith('.gz');
 
-      function processStream(stream) {
-        // Check if content is gzip encoded
-        const contentEncoding = stream.headers['content-encoding'];
-        const isGzip = contentEncoding === 'gzip';
+      let dataStream = res;
 
-        let dataStream = stream;
-
-        if (isGzip) {
-          console.log('[CardUpdater] Content is gzip encoded, decompressing...');
-          const zlib = require('zlib');
-          const gunzip = zlib.createGunzip();
-          stream.pipe(gunzip);
-          dataStream = gunzip;
-        } else {
-          console.log('[CardUpdater] Content is not compressed');
-        }
-
-        dataStream.on('data', (chunk) => {
-          buffer += chunk.toString('utf8');
-
-          // Process complete objects from buffer
-          // The file is a JSON array, so we need to parse it carefully
-          let startIdx = 0;
-          let braceCount = 0;
-          let inString = false;
-          let escapeNext = false;
-          let objectStart = -1;
-
-          for (let i = 0; i < buffer.length; i++) {
-            const char = buffer[i];
-
-            if (escapeNext) {
-              escapeNext = false;
-              continue;
-            }
-
-            if (char === '\\') {
-              escapeNext = true;
-              continue;
-            }
-
-            if (char === '"' && !escapeNext) {
-              inString = !inString;
-              continue;
-            }
-
-            if (!inString) {
-              if (char === '{') {
-                if (braceCount === 0) {
-                  objectStart = i;
-                }
-                braceCount++;
-              } else if (char === '}') {
-                braceCount--;
-                if (braceCount === 0 && objectStart !== -1) {
-                  // We have a complete object
-                  const objStr = buffer.substring(objectStart, i + 1);
-                  try {
-                    const card = JSON.parse(objStr);
-                    processed++;
-
-                    if (card.arena_id) {
-                      withArenaId++;
-                      cards[card.arena_id] = {
-                        name: card.name,
-                        manaCost: card.mana_cost || '',
-                        type: card.type_line ? card.type_line.split('—')[0].trim() : 'Unknown'
-                      };
-                    }
-
-                    if (processed % 1000 === 0) {
-                      console.log(`[CardUpdater] Processed ${processed} cards, found ${withArenaId} with Arena IDs...`);
-                    }
-                  } catch (e) {
-                    // Skip malformed objects
-                  }
-
-                  startIdx = i + 1;
-                  objectStart = -1;
-                }
-              }
-            }
-          }
-
-          // Keep remaining buffer
-          buffer = buffer.substring(startIdx);
-        });
-
-        dataStream.on('end', () => {
-          console.log(`[CardUpdater] Finished processing ${processed} cards, found ${withArenaId} with Arena IDs`);
-          resolve(cards);
-        });
-
-        dataStream.on('error', (err) => {
+      if (isGzip) {
+        console.log('[CardUpdater] Content is gzip compressed, decompressing...');
+        const gunzip = zlib.createGunzip();
+        gunzip.on('error', (err) => {
           reject(new Error(`Stream error: ${err.message}`));
         });
+        res.pipe(gunzip);
+        dataStream = gunzip;
+      } else {
+        console.log('[CardUpdater] Content is not compressed');
       }
+
+      const lines = readline.createInterface({
+        input: dataStream,
+        crlfDelay: Infinity
+      });
+
+      lines.on('line', (line) => {
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+          return;
+        }
+
+        try {
+          const card = JSON.parse(trimmed);
+          processed++;
+
+          if (card.arena_id) {
+            withArenaId++;
+            const cardType = card.type_line ? card.type_line.split('—')[0].trim() : 'Unknown';
+            const isLand = /\bLand\b/.test(cardType);
+            cards[card.arena_id] = {
+              name: card.name,
+              manaCost: card.mana_cost || '',
+              type: cardType,
+              colors: extractColors(card, isLand),
+              scryfallUri: extractScryfallUri(card)
+            };
+          }
+
+          if (processed % 1000 === 0) {
+            console.log(`[CardUpdater] Processed ${processed} cards, found ${withArenaId} with Arena IDs...`);
+          }
+        } catch (e) {
+        }
+      });
+
+      lines.on('close', () => {
+        console.log(`[CardUpdater] Finished processing ${processed} cards, found ${withArenaId} with Arena IDs`);
+        resolve(cards);
+      });
+
+      lines.on('error', (err) => {
+        reject(new Error(`Stream error: ${err.message}`));
+      });
     });
   }
 
-  /**
-   * Main update function - checks if update is needed and downloads if so
-   */
-  async update() {
-    if (this.needsUpdate()) {
+  async update(options = {}) {
+    if (options.force || this.needsUpdate()) {
       return await this.downloadCards();
     }
-    return false; // No update needed
+    return false;
   }
 
-  /**
-   * Load cards from disk
-   */
   loadCards() {
     try {
-      if (fs.existsSync(CARDS_FILE)) {
-        const content = fs.readFileSync(CARDS_FILE, 'utf8');
+      if (fs.existsSync(this.cardsFile)) {
+        const content = fs.readFileSync(this.cardsFile, 'utf8');
         const data = JSON.parse(content);
         this.cardsData = data;
         console.log(`[CardUpdater] Loaded ${Object.keys(data.cards || {}).length} cards from disk`);
