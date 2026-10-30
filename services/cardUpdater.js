@@ -39,6 +39,7 @@ function extractColors(card, isLand) {
 
 class CardUpdater {
   constructor(cardsFile) {
+    this.updating = false;
     this.cardsFile = cardsFile;
     this.cardsData = { cards: {}, lastUpdated: null };
   }
@@ -269,9 +270,20 @@ class CardUpdater {
   }
 
   async update(options = {}) {
-    if (options.force || this.needsUpdate()) {
-      return await this.downloadCards();
+    if (this.updating) {
+      return false;
     }
+
+    if (options.force || this.needsUpdate()) {
+      this.updating = true;
+      try {
+        return await this.downloadCards();
+      }
+      finally {
+        this.updating = false;
+      }
+    }
+
     return false;
   }
 

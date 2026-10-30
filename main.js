@@ -1,17 +1,18 @@
-const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, Notification, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, Notification, shell, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const chokidar = require('chokidar');
-const LogParser = require('./LogParser');
-const DataStore = require('./dataStore');
-const CardUpdater = require('./cardUpdater');
-const { CourseStore, courseCardIds } = require('./matchCourse/courseStore');
+const LogParser = require('./services/logParser');
+const DataStore = require('./services/dataStore');
+const SettingsStore = require('./services/settingsStore');
+const CardUpdater = require('./services/cardUpdater');
+const { CourseStore, courseCardIds } = require('./course/courseStore');
 
 let mainWindow;
 let tray;
 let logWatcher;
-let parser;
 let dataStore;
+let settingsStore;
 let courseStore;
 let cardUpdater;
 let isQuitting = false;
@@ -48,11 +49,11 @@ function clampZoom(factor) {
 }
 
 function applySavedZoom() {
-  if (!mainWindow || !dataStore) {
+  if (!mainWindow || !settingsStore) {
     return;
   }
 
-  const zoom = clampZoom(dataStore.getSettings().zoomFactor);
+  const zoom = clampZoom(settingsStore.getSettings().zoomFactor);
 
   if (mainWindow.isVisible()) {
     mainWindow.webContents.setZoomFactor(zoom);
@@ -65,10 +66,37 @@ function applySavedZoom() {
   }
 }
 
+function saveWindowState() {
+  if (!mainWindow || !settingsStore || mainWindow.isMinimized()) {
+    return;
+  }
+
+  const { x, y, width, height } = mainWindow.getNormalBounds();
+  settingsStore.saveSettings({ window: { x, y, width, height, isMaximized: mainWindow.isMaximized() } });
+}
+
+function onScreenBounds({ x, y, width, height }) {
+  if (![x, y, width, height].every(Number.isInteger)) {
+    return { width, height };
+  }
+
+  const { workArea } = screen.getDisplayMatching({ x, y, width, height });
+  const fittedWidth = Math.min(width, workArea.width);
+  const fittedHeight = Math.min(height, workArea.height);
+
+  return {
+    x: Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - fittedWidth)),
+    y: Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - fittedHeight)),
+    width: fittedWidth,
+    height: fittedHeight
+  };
+}
+
 function createWindow() {
+  const { x, y, width = 1400, height = 1200, isMaximized = false } = settingsStore.getSettings().window || {};
+
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    ...onScreenBounds({ x, y, width, height }),
     minWidth: 800,
     minHeight: 600,
     icon: path.join(__dirname, 'images/icon.png'),
@@ -100,10 +128,24 @@ function createWindow() {
   });
 
   mainWindow.once('ready-to-show', () => {
+    if (isMaximized) {
+      mainWindow.maximize();
+    }
     mainWindow.show();
   });
 
+  let saveStateTimer;
+  const scheduleStateSave = () => {
+    clearTimeout(saveStateTimer);
+    saveStateTimer = setTimeout(saveWindowState, 500);
+  };
+  mainWindow.on('resize', scheduleStateSave);
+  mainWindow.on('move', scheduleStateSave);
+
   mainWindow.on('close', (event) => {
+    clearTimeout(saveStateTimer);
+    saveWindowState();
+
     if (!isQuitting && process.platform === 'darwin') {
       event.preventDefault();
       mainWindow.hide();
@@ -267,8 +309,6 @@ function startLogWatcher(logPath) {
     logWatcher.close();
   }
 
-  parser = new LogParser();
-
   if (!fs.existsSync(logPath)) {
     console.log('Log file not found at:', logPath);
     updateTrayStatus('Log file not found, check settings...');
@@ -410,7 +450,7 @@ function handleGameEvent(event, { silent = false } = {}) {
           console.log('[Deck Save] No playerDeck data found in event');
         }
 
-        const settings = dataStore.getSettings();
+        const settings = settingsStore.getSettings();
         console.log('[Notification] Settings:', settings);
         console.log('[Notification] Tray available:', !!tray);
         console.log('[Notification] Show notifications:', settings.showNotifications);
@@ -686,13 +726,13 @@ ipcMain.handle('set-zoom', async (event, factor) => {
 });
 
 ipcMain.handle('get-settings', async () => {
-  if (!dataStore) return {};
-  return dataStore.getSettings();
+  if (!settingsStore) return {};
+  return settingsStore.getSettings();
 });
 
 ipcMain.handle('save-settings', async (event, settings) => {
-  if (!dataStore) return false;
-  dataStore.saveSettings(settings);
+  if (!settingsStore) return false;
+  settingsStore.saveSettings(settings);
   return true;
 });
 
@@ -764,7 +804,7 @@ ipcMain.on('close-window', () => {
 
 ipcMain.handle('test-notification', async () => {
   try {
-    const settings = dataStore.getSettings();
+    const settings = settingsStore.getSettings();
     console.log('[Test Notification] Settings:', settings);
     console.log('[Test Notification] Tray available:', !!tray);
 
@@ -821,24 +861,12 @@ ipcMain.handle('test-notification', async () => {
 });
 
 app.whenReady().then(async () => {
+  settingsStore = new SettingsStore();
   createWindow();
   createTray();
   trySendStatus({ status: 'success', text: 'Starting...' });
 
-  console.log('[App] Checking for card database updates...');
   cardUpdater = new CardUpdater(DataStore.cardsFilePath());
-
-  try {
-    const updated = await cardUpdater.update();
-    if (updated) {
-      console.log('[App] Card database was updated');
-    } else {
-      console.log('[App] Card database is up to date');
-    }
-  } catch (error) {
-    console.error('[App] Failed to update card database:', error.message);
-  }
-
   dataStore = new DataStore();
   courseStore = new CourseStore(dataStore.dataDir);
   dataStore.onMatchesRetired = matches => matches.forEach(match => courseStore.delete(match.matchId));
@@ -850,7 +878,6 @@ app.whenReady().then(async () => {
 
   startLogWatcher(logPath);
 
-  // Logs are replaced every time Arena starts, so keep what they hold while we can.
   courseStore.recordFromLogs(matchLogPaths(), Array.from(keptMatchIds()))
     .catch(error => console.error('[Course] Error recording courses from logs:', error));
 
@@ -859,6 +886,14 @@ app.whenReady().then(async () => {
       createWindow();
     }
   });
+
+  console.log('[App] Checking for card database updates...');
+  cardUpdater.update()
+    .then(updated => updated
+      ? console.log('[App] Card database was updated')
+      : console.log('[App] Card database is up to date'))
+    .catch(error =>
+      console.error('[App] Failed to update card database:', error.message));
 });
 
 app.on('window-all-closed', () => {

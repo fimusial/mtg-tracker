@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
-const matchArchive = require('./matchHistory/matchArchive');
+const matchArchive = require('./matchArchive');
 
 const COLOR_ORDER = ['W', 'U', 'B', 'R', 'G', 'C'];
 
@@ -56,7 +56,6 @@ class DataStore {
     this.dataDir = DataStore.dataDirectory();
 
     this.dataFile = path.join(this.dataDir, 'matches.json');
-    this.settingsFile = path.join(this.dataDir, 'settings.json');
     this.cardsFile = DataStore.cardsFilePath();
 
     if (!fs.existsSync(this.dataDir)) {
@@ -64,7 +63,6 @@ class DataStore {
     }
 
     this.data = this.loadData();
-    this.settings = this.loadSettings();
     this.cards = this.loadCards();
     this.onMatchesRetired = null;
 
@@ -256,37 +254,11 @@ class DataStore {
     };
   }
 
-  loadSettings() {
-    try {
-      if (fs.existsSync(this.settingsFile)) {
-        const content = fs.readFileSync(this.settingsFile, 'utf8');
-        return JSON.parse(content);
-      }
-    } catch (error) {
-      console.error('Error loading settings:', error);
-    }
-
-    return {
-      minimizeToTray: true,
-      showNotifications: true,
-      zoomFactor: 1
-    };
-  }
-
   saveData() {
     try {
       fs.writeFileSync(this.dataFile, JSON.stringify(this.data, null, 2));
     } catch (error) {
       console.error('Error saving data:', error);
-    }
-  }
-
-  saveSettings(settings) {
-    this.settings = { ...this.settings, ...settings };
-    try {
-      fs.writeFileSync(this.settingsFile, JSON.stringify(this.settings, null, 2));
-    } catch (error) {
-      console.error('Error saving settings:', error);
     }
   }
 
@@ -603,10 +575,6 @@ class DataStore {
       formats: formatStats,
       decks: deckStats
     };
-  }
-
-  getSettings() {
-    return this.settings;
   }
 
   clearAll() {
