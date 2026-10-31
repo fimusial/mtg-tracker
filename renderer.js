@@ -196,7 +196,7 @@ function renderDeckGrid({ container, decks, onClick, hint, emptyIcon, emptyText 
                     return `
                         <div class="format-card deck-card" onclick="${onClick}('${deck.id}')" style="cursor: pointer;">
                             <h4>
-                                <span class="format-name">${deck.name}${renderManaSymbols(deck.colors)}</span>
+                                <span class="format-name">${escapeHtml(deck.name)}${renderManaSymbols(deck.colors)}</span>
                                 <span class="format-badge">${deck.total} matches</span>
                             </h4>
                             <div class="format-stats">
@@ -238,7 +238,7 @@ async function showDeckDetails(deckId) {
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
-                <h2>${deck.name}${renderManaSymbols(deck.colors)}</h2>
+                <h2 class="deck-title" title="Click to rename" onclick="startDeckRename(this, '${deckId}')">${escapeHtml(deck.name)}</h2>
                 <div style="display: flex; gap: 10px;">
                     <button class="btn btn-primary" onclick="exportDeckToClipboard('${deckId}')">📋 Copy</button>
                     <button class="btn btn-secondary" onclick="closeDeckModal()">✕</button>
@@ -247,6 +247,7 @@ async function showDeckDetails(deckId) {
             <div class="modal-body">
                 <div class="deck-info">
                     <p><strong>Format:</strong> ${deck.format || 'Unknown'}</p>
+                    <p><strong>Colors:</strong> ${renderManaSymbols(deck.colors) || 'Unknown'}</p>
                     <p><strong>Last Used:</strong> ${new Date(deck.lastUsed).toLocaleDateString()}</p>
                 </div>
 
@@ -299,7 +300,7 @@ async function showOpponentDeckDetails(matchId) {
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
-                <h2>${deck.name}${renderManaSymbols(deck.colors)}</h2>
+                <h2>${deck.name}</h2>
                 <div style="display: flex; gap: 10px;">
                     <button class="btn btn-primary" onclick="exportOpponentDeckToClipboard('${matchId}')">📋 Copy</button>
                     <button class="btn btn-secondary" onclick="closeDeckModal()">✕</button>
@@ -308,6 +309,7 @@ async function showOpponentDeckDetails(matchId) {
             <div class="modal-body">
                 <div class="deck-info">
                     <p><strong>Format:</strong> ${deck.format || 'Unknown'}</p>
+                    <p><strong>Colors:</strong> ${renderManaSymbols(deck.colors) || 'Unknown'}</p>
                 </div>
 
                 <div class="deck-lists">
@@ -326,6 +328,39 @@ async function showOpponentDeckDetails(matchId) {
 
     modal.addEventListener('click', (e) => {
         if (e.target === modal) closeDeckModal();
+    });
+}
+
+function startDeckRename(title, deckId) {
+    const previousName = title.textContent;
+    const input = document.createElement('input');
+    input.className = 'deck-title-input';
+    input.value = previousName;
+    title.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const finish = async (save) => {
+        if (finished) {
+            return;
+        }
+        finished = true;
+        const savedName = save ? await ipcRenderer.invoke('rename-deck', deckId, input.value) : null;
+        title.textContent = savedName || previousName;
+        input.replaceWith(title);
+        if (savedName && savedName !== previousName) {
+            refreshCurrentDataPage();
+        }
+    };
+
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') finish(true);
+        if (e.key === 'Escape') {
+            e.stopPropagation();
+            finish(false);
+        }
     });
 }
 
@@ -454,52 +489,6 @@ async function loadFormats() {
                 `;
             }).join('');
     }
-
-    document.getElementById('formats-grid').innerHTML = renderFormatCards(formats);
-}
-
-function renderFormatCards(formats) {
-    const entries = Object.entries(formats || {});
-
-    if (entries.length === 0) {
-        return `
-            <div class="empty-state" style="grid-column: 1 / -1;">
-                <div class="icon">🎮</div>
-                <p>No matches recorded yet. Start playing MTG Arena!</p>
-            </div>
-        `;
-    }
-
-    return entries
-        .sort((a, b) => b[1].total - a[1].total)
-        .map(([format, data]) => {
-            const winRate = data.winRate || 0;
-            return `
-                <div class="format-card">
-                    <h4>
-                        <span class="format-name">${format}</span>
-                        <span class="format-badge">${data.total} matches</span>
-                    </h4>
-                    <div class="format-stats">
-                        <div class="mini-stat">
-                            <span class="number">${data.wins}</span>
-                            <span class="label">Wins</span>
-                        </div>
-                        <div class="mini-stat">
-                            <span class="number">${data.losses}</span>
-                            <span class="label">Losses</span>
-                        </div>
-                        <div class="mini-stat">
-                            <span class="number">${winRate}%</span>
-                            <span class="label">Win Rate</span>
-                        </div>
-                    </div>
-                    <div class="winrate-bar">
-                        <div class="fill" style="width: ${winRate}%"></div>
-                    </div>
-                </div>
-            `;
-        }).join('');
 }
 
 const ZOOM_MIN = 80;
@@ -769,7 +758,7 @@ function renderMatchItem(match) {
     const date = formatMatchDate(new Date(match.timestamp));
     const time = new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const opponentText = match.opponentName ? `v.s. ${match.opponentName}` : '';
-    const playerDeck = `${match.deckName || 'Unknown Deck'}${renderManaSymbols(match.deckColors)}`;
+    const playerDeck = `${escapeHtml(match.deckName || 'Unknown Deck')}${renderManaSymbols(match.deckColors)}`;
     const opponentDeck = match.opponentDeck || { name: 'Unknown Deck', colors: [] };
 
     return `

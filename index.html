@@ -232,6 +232,7 @@
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 15px;
+            margin-top: 30px;
             margin-bottom: 30px;
         }
 
@@ -435,10 +436,13 @@
         }
 
         .match-pager-range {
+            min-width: 14ch;
             margin-left: 12px;
             font-size: 12px;
             color: var(--text-muted);
             font-variant-numeric: tabular-nums;
+            text-align: center;
+            white-space: nowrap;
         }
 
         .data-table {
@@ -759,6 +763,30 @@
             font-size: 24px;
         }
 
+        .deck-title {
+            cursor: pointer;
+            transition: color 0.15s;
+        }
+
+        .deck-title:hover {
+            color: #4b4dd1;
+        }
+
+        .deck-title-input {
+            flex: 1;
+            min-width: 0;
+            margin-right: 10px;
+            padding: 2px 6px;
+            font: inherit;
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--text);
+            background: var(--bg);
+            border: 1px solid #4b4dd1;
+            border-radius: 5px;
+            outline: none;
+        }
+
         .modal-body {
             padding: 20px;
         }
@@ -855,7 +883,11 @@
             box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
         }
 
-        .modal-header .mana-symbol,
+        .deck-info .mana-symbols {
+            margin-left: 4px;
+        }
+
+        .deck-info .mana-symbol,
         .format-card .mana-symbol {
             width: 16px;
             height: 16px;
@@ -1482,16 +1514,6 @@
                     </thead>
                     <tbody></tbody>
                 </table>
-
-                <div class="section-header">
-                    <h2>Format Cards</h2>
-                </div>
-                <div class="format-grid" id="formats-grid">
-                    <div class="empty-state" style="grid-column: 1 / -1;">
-                        <div class="icon">📈</div>
-                        <p>No matches recorded yet.</p>
-                    </div>
-                </div>
             </div>
 
             <div class="page" id="page-calculator">

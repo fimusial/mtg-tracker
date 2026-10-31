@@ -588,6 +588,11 @@ ipcMain.handle('get-deck', async (event, deckId) => {
   return deck;
 });
 
+ipcMain.handle('rename-deck', async (event, deckId, name) => {
+  if (!dataStore) return null;
+  return dataStore.setDeckName(deckId, name);
+});
+
 ipcMain.handle('get-match-opponent-deck', async (event, matchId) => {
   if (!dataStore) return null;
   const match = dataStore.getMatch(matchId);

@@ -326,7 +326,22 @@ class DataStore {
   }
 
   getDeck(deckId) {
-    return this.data.decks[deckId];
+    const deck = this.data.decks[deckId];
+    return deck ? { ...deck, name: this.displayDeckName(deckId, deck.name) } : deck;
+  }
+
+  displayDeckName(deckId, fallback) {
+    return this.data.deckNameOverrides?.[deckId] || fallback;
+  }
+
+  setDeckName(deckId, name) {
+    const trimmed = (name || '').trim();
+    if (!trimmed) {
+      return null;
+    }
+    this.data.deckNameOverrides = { ...this.data.deckNameOverrides, [deckId]: trimmed };
+    this.saveData();
+    return trimmed;
   }
 
   deckIdFromName(deckName) {
@@ -356,6 +371,12 @@ class DataStore {
         this.data.decks[newId] = { ...oldDeck, id: newId, name: newName };
       }
       delete this.data.decks[oldId];
+    }
+
+    const overrides = this.data.deckNameOverrides;
+    if (overrides?.[oldId]) {
+      overrides[newId] = overrides[newId] || overrides[oldId];
+      delete overrides[oldId];
     }
 
     let renamed = 0;
@@ -504,15 +525,17 @@ class DataStore {
   }
 
   getMatches() {
-    return this.data.matches.sort((a, b) =>
-      new Date(b.timestamp) - new Date(a.timestamp)
-    );
+    return this.data.matches
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .map(match => match.deckId
+        ? { ...match, deckName: this.displayDeckName(match.deckId, match.deckName) }
+        : match);
   }
 
   getDecks() {
-    return Object.values(this.data.decks).sort((a, b) =>
-      new Date(b.lastUsed || 0) - new Date(a.lastUsed || 0)
-    );
+    return Object.values(this.data.decks)
+      .sort((a, b) => new Date(b.lastUsed || 0) - new Date(a.lastUsed || 0))
+      .map(deck => ({ ...deck, name: this.displayDeckName(deck.id, deck.name) }));
   }
 
   getStats() {
@@ -563,6 +586,7 @@ class DataStore {
     });
 
     Object.values(deckStats).forEach(stat => {
+      stat.name = this.displayDeckName(stat.id, stat.name);
       stat.winRate = winRateFrom(stat.wins, stat.losses);
     });
 
@@ -609,6 +633,10 @@ class DataStore {
 
     if (importData.decks) {
       this.data.decks = { ...this.data.decks, ...importData.decks };
+    }
+
+    if (importData.deckNameOverrides) {
+      this.data.deckNameOverrides = { ...importData.deckNameOverrides, ...this.data.deckNameOverrides };
     }
 
     this.retireOldMatches();
